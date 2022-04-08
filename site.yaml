@@ -1,0 +1,174 @@
+---
+
+- hosts: webservers
+
+  become: yes
+
+  tasks:
+  - name: Install Nginx
+
+    apt:
+
+      name: nginx
+
+      state: present
+
+      update_cache: true
+    notify:
+
+    - start nginx
+
+  - name: Installs php
+
+    apt:
+
+      name: php
+
+      state: present
+
+      update_cache: true
+
+
+
+  - name: Installs php-fpm
+
+    apt:
+
+      name: php-fpm
+
+      state: present
+
+      update_cache: true
+
+    notify:
+
+    - start php7.4-fpm
+
+  - name: keeping php7.4-fpm cgi.fix_pathinfo=0 
+    lineinfile: dest=/etc/php/7.4/fpm/php.ini regexp='^(.*)cgi.fix_pathinfo=' line=cgi.fix_pathinfo=0
+    notify:
+    - restart php7.4-fpm
+    - restart nginx
+
+  - name: Removes "nginx.conf"
+    file:
+       path: "/etc/nginx/nginx.conf"
+       state: absent
+  
+  - name: Sets nginx.conf
+    template:
+       src: "./Nginx.conf.j2"
+       dest: "/etc/nginx/nginx.conf"
+    notify:
+    - restart php7.4-fpm
+    - restart nginx
+
+
+
+  - name: Removes "default"
+    file:
+       path: "/etc/nginx/sites-enabled/default"
+       state: absent
+    notify: 
+    - restart nginx
+
+  - name: Sets Nginx conf file
+    template:
+       src: "./default"
+       dest: "/etc/nginx/sites-available/default1"
+
+  - name: links default 
+    file:
+       src: "/etc/nginx/sites-available/default1"
+       dest: "/etc/nginx/sites-enabled/default1"
+       state: link
+    notify: 
+    - restart nginx
+   
+
+  - name: "UFW - Allow HTTP on port 80 to connect connections for the nginx"
+    ufw:
+       rule: allow
+       port: '80'
+       proto: any
+
+
+  - name: Sets Up index.PHP Page at root var/www/html
+    template:
+      src: "./index.php"
+      dest: "/var/www/html/index.php"
+    notify:
+    - restart nginx
+    - restart php7.4-fpm
+
+
+  handlers:
+
+  - name: start php7.4-fpm
+    service:
+
+      name: php7.4-fpm
+
+      state: started
+
+
+
+  - name: start nginx
+    service:
+
+      name: nginx
+
+      state: started
+
+
+  - name: restart php7.4-fpm
+    service:
+
+      name: php7.4-fpm
+
+      state: restarted
+  - name: restart nginx
+
+    service:
+
+      name: nginx
+
+      state: restarted
+- hosts: haproxy
+  become: yes
+
+  tasks:
+
+  - name: Installs haproxy load balancer on devhaproxy
+    apt:
+      name: haproxy
+      state: present
+      update_cache: true
+
+  - name: locates haproxy configuration
+    template:
+      src: ./haproxy.cfg.j2
+      dest: /etc/haproxy/haproxy.cfg
+      mode: 0640
+      owner: root
+      group: root
+    notify:
+    - restart haproxy
+  - name: Sets default 
+    lineinfile:
+      dest: /etc/default/haproxy
+      regexp: "^ENABLED"
+      line: "ENABLED=1"
+    notify:
+    - restart haproxy
+
+
+  handlers:
+  
+  - name: restart haproxy
+    service:
+        name: haproxy
+        state: restarted
+
+   
+...
